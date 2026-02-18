@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { AlertTriangle, CheckCircle, XCircle, Plus, Search, X, Save, Trash2, Utensils, Package } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Plus, Search, X, Save, Trash2, Utensils, Package, Pencil } from 'lucide-react';
 
 // --- TYPES ---
 interface Ingredient {
@@ -35,6 +35,7 @@ const Inventory = () => {
 
   // Product Modal State
   const [isProdModalOpen, setIsProdModalOpen] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [prodForm, setProdForm] = useState({ 
     name: '', 
     basePrice: 0, 
@@ -86,7 +87,21 @@ const Inventory = () => {
   };
 
   // --- PRODUCT LOGIC ---
-  const openProdModal = () => {
+  const openProdModal = (product?: Product) => {
+  if (product) 
+  {
+    setEditingProduct(product);
+    setProdForm({
+      name: product.name,
+      basePrice: product.basePrice,
+      category: product.category || 'Food',
+      imgUrl: product.imgUrl || 'https://placehold.co/400x300/e2e8f0/1e293b?text=Food',
+      recipe: product.recipe || [] 
+    });
+  } else 
+  {
+    // CREATE MODE: Reset form
+    setEditingProduct(null);
     setProdForm({ 
       name: '', 
       basePrice: 0, 
@@ -94,8 +109,9 @@ const Inventory = () => {
       imgUrl: 'https://placehold.co/400x300/e2e8f0/1e293b?text=Food',
       recipe: [] 
     });
-    setIsProdModalOpen(true);
-  };
+  }
+  setIsProdModalOpen(true);
+};
 
   const toggleIngredientInRecipe = (ingId: string) => {
     setProdForm(prev => {
@@ -115,12 +131,22 @@ const Inventory = () => {
   };
 
   const saveProduct = async (e: React.FormEvent) => {
-    e.preventDefault();
+  e.preventDefault();
+  
+  if (editingProduct) {
+    // UPDATE LOGIC
+    await updateDoc(doc(db, "products", editingProduct.id), {
+      ...prodForm,
+      basePrice: Number(prodForm.basePrice)
+    });
+  } else {
+    // CREATE LOGIC
     await addDoc(collection(db, "products"), {
       ...prodForm,
       basePrice: Number(prodForm.basePrice)
     });
-    setIsProdModalOpen(false);
+  }
+  setIsProdModalOpen(false);
   };
 
   const deleteProduct = async (id: string) => {
@@ -185,7 +211,7 @@ const Inventory = () => {
       {activeTab === 'products' && (
         <>
           <div className="flex justify-end">
-            <button onClick={openProdModal} className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold flex gap-2 items-center shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all">
+            <button onClick={() => openProdModal()} className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold flex gap-2 items-center shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all">
               <Utensils size={20} /> Create New Menu Item
             </button>
           </div>
@@ -195,10 +221,15 @@ const Inventory = () => {
               <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group">
                 <div className="h-48 bg-slate-100 relative">
                   <img src={prod.imgUrl} className="w-full h-full object-cover" />
+                  <button onClick={(e) => { e.stopPropagation(); openProdModal(prod); }}
+                    className="absolute top-2 right-12 bg-white/90 p-2 rounded-full text-blue-500 hover:bg-blue-50 transition-colors opacity-0 group-hover:opacity-100">
+                    <Pencil size={18} /> 
+                  </button>
                   <button onClick={() => deleteProduct(prod.id)} className="absolute top-2 right-2 bg-white/90 p-2 rounded-full text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100">
                     <Trash2 size={18} />
                   </button>
                 </div>
+
                 <div className="p-6">
                   <div className="flex justify-between items-start mb-2">
                     <h3 className="font-bold text-xl text-slate-800">{prod.name}</h3>
@@ -246,27 +277,97 @@ const Inventory = () => {
       {isProdModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            
+            {/* Header */}
             <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
               <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
-                <Utensils className="text-emerald-500" /> Construct New Menu Item
+                <Utensils className="text-emerald-500" /> 
+                {editingProduct ? 'Edit Menu Item' : 'Construct New Menu Item'}
               </h2>
               <button onClick={() => setIsProdModalOpen(false)}><X size={24} className="text-slate-400" /></button>
             </div>
             
             <div className="p-8 overflow-y-auto flex-1 space-y-8">
-              {/* Basic Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Product Name</label>
-                  <input required type="text" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Bacon Deluxe" />
+              
+              {/* --- NEW SECTION: Basic Info & Image Preview --- */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                
+                {/* Left Side: Inputs */}
+                <div className="md:col-span-2 space-y-4">
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Product Name</label>
+                    <input 
+                      required 
+                      type="text" 
+                      value={prodForm.name} 
+                      onChange={e => setProdForm({...prodForm, name: e.target.value})} 
+                      className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" 
+                      placeholder="e.g. Bacon Deluxe" 
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">Price (₱)</label>
+                      <input 
+                        required 
+                        type="number" 
+                        value={prodForm.basePrice} 
+                        onChange={e => setProdForm({...prodForm, basePrice: Number(e.target.value)})} 
+                        className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono font-bold" 
+                        placeholder="0.00" 
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-bold text-slate-700 mb-2">Category</label>
+                      <select 
+                        value={prodForm.category}
+                        onChange={e => setProdForm({...prodForm, category: e.target.value})}
+                        className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none bg-white"
+                      >
+                        <option value="Food">Food</option>
+                        <option value="Drink">Drink</option>
+                        <option value="Dessert">Dessert</option>
+                        <option value="Add-on">Add-on</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">Image URL</label>
+                    <input 
+                      type="url" 
+                      value={prodForm.imgUrl} 
+                      onChange={e => setProdForm({...prodForm, imgUrl: e.target.value})} 
+                      className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none text-sm text-slate-600 font-mono" 
+                      placeholder="https://..." 
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Paste a link from Google Images or Unsplash.</p>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-sm font-bold text-slate-700 mb-2">Selling Price (₱)</label>
-                  <input required type="number" value={prodForm.basePrice} onChange={e => setProdForm({...prodForm, basePrice: Number(e.target.value)})} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono font-bold" placeholder="0.00" />
+
+                {/* Right Side: Live Preview */}
+                <div className="flex flex-col gap-2">
+                  <label className="block text-sm font-bold text-slate-700">Preview</label>
+                  <div className="flex-1 bg-slate-100 rounded-2xl border-2 border-dashed border-slate-300 overflow-hidden flex items-center justify-center relative group">
+                    {prodForm.imgUrl ? (
+                      <img 
+                        src={prodForm.imgUrl} 
+                        className="w-full h-full object-cover absolute inset-0" 
+                        onError={(e) => e.currentTarget.src = 'https://placehold.co/400x300?text=Invalid+URL'}
+                        alt="Preview"
+                      />
+                    ) : (
+                      <div className="text-slate-400 text-center text-sm p-4">
+                        No Image Selected
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+              {/* --- END NEW SECTION --- */}
 
-              {/* Recipe Builder */}
+              {/* Recipe Builder (This stays the same) */}
               <div>
                 <label className="block text-sm font-bold text-slate-700 mb-4">Recipe Construction (Select Ingredients)</label>
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
@@ -286,8 +387,8 @@ const Inventory = () => {
                           <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                             <input 
                               type="number" 
-                              min="0.1"
-                              step="0.1"
+                              min="1"
+                              step="1"
                               value={isSelected.quantityRequired}
                               onChange={(e) => updateRecipeQty(ing.id, Number(e.target.value))}
                               className="w-full p-1 text-center text-sm font-bold border border-emerald-200 rounded bg-white"
@@ -303,9 +404,10 @@ const Inventory = () => {
               </div>
             </div>
 
+            {/* Footer */}
             <div className="p-6 border-t border-slate-100 bg-slate-50">
               <button onClick={saveProduct} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg">
-                Launch Product
+                {editingProduct ? 'Save Changes' : 'Launch Product'}
               </button>
             </div>
           </div>
