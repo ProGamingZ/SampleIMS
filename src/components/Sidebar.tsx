@@ -1,7 +1,16 @@
 import { NavLink } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
+import { useNavigate } from 'react-router-dom';
 import { LayoutDashboard, ShoppingCart, Settings, Package, LogOut } from 'lucide-react';
 
 const Sidebar = () => {
+  const { logout } = useAuth();
+  const navigate = useNavigate();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate('/login');
+  };
   const navItems = [
     { icon: <LayoutDashboard size={24} />, label: "Dashboard", path: "/" },
     { icon: <ShoppingCart size={24} />, label: "Sell", path: "/sell" },
@@ -40,8 +49,9 @@ const Sidebar = () => {
 
       {/* Bottom Actions */}
       <div className="p-4 border-t border-slate-800">
-        <button className="flex items-center gap-4 px-4 py-3 w-full rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors">
-          <LogOut size={24} />
+        <button onClick={handleLogout} 
+          className="flex items-center gap-4 px-4 py-3 w-full rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors">
+            <LogOut size={24} />
           <span className="font-medium hidden lg:block">Logout</span>
         </button>
       </div>
