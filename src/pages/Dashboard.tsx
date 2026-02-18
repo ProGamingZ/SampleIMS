@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, orderBy, limit } from 'firebase/firestore';
 import { db } from '../firebase';
-import { TrendingUp, AlertTriangle, Clock, DollarSign } from 'lucide-react';
+import { TrendingUp, AlertTriangle, Clock, PhilippinePeso } from 'lucide-react';
 
 const Dashboard = () => {
   const [totalSales, setTotalSales] = useState(0);
@@ -51,7 +51,7 @@ const Dashboard = () => {
         {/* Card 1: Revenue */}
         <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 flex items-center gap-4">
           <div className="p-4 bg-emerald-100 text-emerald-600 rounded-xl">
-            <DollarSign size={32} />
+            <PhilippinePeso size={32} />
           </div>
           <div>
             <p className="text-slate-500 text-sm font-medium">Total Revenue</p>
