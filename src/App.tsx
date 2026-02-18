@@ -1,11 +1,9 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
+import Dashboard from './pages/Dashboard';
 import Sell from './pages/Sell';
 import Inventory from './pages/Inventory';
 import Settings from './pages/Settings';
-
-// Placeholder pages (We will build these properly next!)
-const Dashboard = () => <div className="text-3xl font-bold">📊 Dashboard Overview</div>;
 
 function App() {
   return (
