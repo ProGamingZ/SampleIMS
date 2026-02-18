@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { doc, onSnapshot, updateDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { Calculator, Save } from 'lucide-react';
+import { Calculator} from 'lucide-react';
 
 interface StoreSettings {
   storeName: string;

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { AlertTriangle, CheckCircle, XCircle, Plus, Search, X, Save, Trash2, Utensils, Package, Pencil } from 'lucide-react';
+import { CheckCircle, Plus,  X,  Trash2, Utensils, Package, Pencil } from 'lucide-react';
 
 // --- TYPES ---
 interface Ingredient {

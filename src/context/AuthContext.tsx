@@ -1,7 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { getAuth } from 'firebase/auth';
-import { initializeApp } from 'firebase/app';
 // We need to import the app we initialized in firebase.ts
 import { db } from '../firebase'; 
 
