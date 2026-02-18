@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { collection, onSnapshot, query, orderBy, addDoc, updateDoc, doc, deleteDoc } from 'firebase/firestore';
 import { db } from '../firebase';
-import { AlertTriangle, CheckCircle, XCircle, Plus, Search, X, Save, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, XCircle, Plus, Search, X, Save, Trash2, Utensils, Package } from 'lucide-react';
 
+// --- TYPES ---
 interface Ingredient {
   id: string;
   name: string;
@@ -11,238 +12,302 @@ interface Ingredient {
   unit: string;
 }
 
+interface Product {
+  id: string;
+  name: string;
+  basePrice: number;
+  imgUrl: string;
+  category: string;
+  recipe: { ingredientId: string; quantityRequired: number; name?: string }[];
+}
+
 const Inventory = () => {
+  const [activeTab, setActiveTab] = useState<'ingredients' | 'products'>('ingredients');
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Modal State
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [editingItem, setEditingItem] = useState<Ingredient | null>(null);
+  // Ingredient Modal State
+  const [isIngModalOpen, setIsIngModalOpen] = useState(false);
+  const [editingIngredient, setEditingIngredient] = useState<Ingredient | null>(null);
+  const [ingForm, setIngForm] = useState({ name: '', currentStock: 0, lowStockThreshold: 10, unit: 'pcs' });
 
-  // Form State
-  const [formData, setFormData] = useState({ name: '', currentStock: 0, lowStockThreshold: 10, unit: 'pcs' });
+  // Product Modal State
+  const [isProdModalOpen, setIsProdModalOpen] = useState(false);
+  const [prodForm, setProdForm] = useState({ 
+    name: '', 
+    basePrice: 0, 
+    category: 'Food', 
+    imgUrl: 'https://placehold.co/400x300/e2e8f0/1e293b?text=Food',
+    recipe: [] as { ingredientId: string; quantityRequired: number }[] 
+  });
 
-  // 1. Real-time Listener
+  // 1. Real-time Listeners
   useEffect(() => {
-    const q = query(collection(db, "ingredients"), orderBy("name"));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const inventoryList = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      })) as Ingredient[];
-      setIngredients(inventoryList);
+    const unsubIng = onSnapshot(query(collection(db, "ingredients"), orderBy("name")), (snap) => {
+      setIngredients(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Ingredient[]);
+    });
+    const unsubProd = onSnapshot(query(collection(db, "products"), orderBy("name")), (snap) => {
+      setProducts(snap.docs.map(d => ({ id: d.id, ...d.data() })) as Product[]);
       setLoading(false);
     });
-    return () => unsubscribe();
+    return () => { unsubIng(); unsubProd(); };
   }, []);
 
-  // 2. Open Modal Logic
-  const openAddModal = () => {
-    setEditingItem(null); // Null means "Create New"
-    setFormData({ name: '', currentStock: 0, lowStockThreshold: 10, unit: 'pcs' });
-    setIsModalOpen(true);
+  // --- INGREDIENT LOGIC ---
+  const openIngModal = (item?: Ingredient) => {
+    if (item) {
+      setEditingIngredient(item);
+      setIngForm({ ...item });
+    } else {
+      setEditingIngredient(null);
+      setIngForm({ name: '', currentStock: 0, lowStockThreshold: 10, unit: 'pcs' });
+    }
+    setIsIngModalOpen(true);
   };
 
-  const openEditModal = (item: Ingredient) => {
-    setEditingItem(item); // Object means "Edit Mode"
-    setFormData({ 
-      name: item.name, 
-      currentStock: item.currentStock, 
-      lowStockThreshold: item.lowStockThreshold, 
-      unit: item.unit 
-    });
-    setIsModalOpen(true);
-  };
-
-  // 3. Save Logic (Create OR Update)
-  const handleSave = async (e: React.FormEvent) => {
+  const saveIngredient = async (e: React.FormEvent) => {
     e.preventDefault();
-    try {
-      if (editingItem) {
-        // UPDATE Existing
-        const itemRef = doc(db, "ingredients", editingItem.id);
-        await updateDoc(itemRef, {
-          name: formData.name,
-          currentStock: Number(formData.currentStock),
-          lowStockThreshold: Number(formData.lowStockThreshold),
-          unit: formData.unit
-        });
-      } else {
-        // CREATE New
-        await addDoc(collection(db, "ingredients"), {
-          name: formData.name,
-          currentStock: Number(formData.currentStock),
-          lowStockThreshold: Number(formData.lowStockThreshold),
-          unit: formData.unit
-        });
+    if (editingIngredient) {
+      await updateDoc(doc(db, "ingredients", editingIngredient.id), {
+        ...ingForm,
+        currentStock: Number(ingForm.currentStock),
+        lowStockThreshold: Number(ingForm.lowStockThreshold)
+      });
+    } else {
+      await addDoc(collection(db, "ingredients"), {
+        ...ingForm,
+        currentStock: Number(ingForm.currentStock),
+        lowStockThreshold: Number(ingForm.lowStockThreshold)
+      });
+    }
+    setIsIngModalOpen(false);
+  };
+
+  // --- PRODUCT LOGIC ---
+  const openProdModal = () => {
+    setProdForm({ 
+      name: '', 
+      basePrice: 0, 
+      category: 'Food', 
+      imgUrl: 'https://placehold.co/400x300/e2e8f0/1e293b?text=Food',
+      recipe: [] 
+    });
+    setIsProdModalOpen(true);
+  };
+
+  const toggleIngredientInRecipe = (ingId: string) => {
+    setProdForm(prev => {
+      const exists = prev.recipe.find(r => r.ingredientId === ingId);
+      if (exists) {
+        return { ...prev, recipe: prev.recipe.filter(r => r.ingredientId !== ingId) };
       }
-      setIsModalOpen(false);
-    } catch (error) {
-      console.error("Error saving:", error);
-      alert("Failed to save item.");
-    }
+      return { ...prev, recipe: [...prev.recipe, { ingredientId: ingId, quantityRequired: 1 }] };
+    });
   };
 
-  // 4. Delete Logic
-  const handleDelete = async () => {
-    if (!editingItem) return;
-    if (confirm(`Are you sure you want to delete ${editingItem.name}? This might break recipes!`)) {
-      await deleteDoc(doc(db, "ingredients", editingItem.id));
-      setIsModalOpen(false);
-    }
+  const updateRecipeQty = (ingId: string, qty: number) => {
+    setProdForm(prev => ({
+      ...prev,
+      recipe: prev.recipe.map(r => r.ingredientId === ingId ? { ...r, quantityRequired: qty } : r)
+    }));
   };
 
-  // Helper: Traffic Light
-  const getStockStatus = (current: number, threshold: number) => {
-    if (current === 0) return { color: "bg-red-100 border-red-500 text-red-700", icon: <XCircle />, label: "Out of Stock" };
-    if (current <= threshold) return { color: "bg-yellow-100 border-yellow-500 text-yellow-800", icon: <AlertTriangle />, label: "Low Stock" };
-    return { color: "bg-emerald-100 border-emerald-500 text-emerald-700", icon: <CheckCircle />, label: "Good" };
+  const saveProduct = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await addDoc(collection(db, "products"), {
+      ...prodForm,
+      basePrice: Number(prodForm.basePrice)
+    });
+    setIsProdModalOpen(false);
   };
 
-  // Helper: Filter items
-  const filteredIngredients = ingredients.filter(item => 
-    item.name.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const deleteProduct = async (id: string) => {
+    if(confirm("Delete this menu item?")) await deleteDoc(doc(db, "products", id));
+  };
 
-  if (loading) return <div className="p-10 text-xl">Loading Inventory...</div>;
+  if (loading) return <div className="p-10">Loading...</div>;
 
   return (
-    <div className="space-y-6 relative">
-      {/* Header Actions */}
+    <div className="space-y-6">
       <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-        <h1 className="text-3xl font-bold text-slate-800">📦 Inventory</h1>
+        <h1 className="text-3xl font-bold text-slate-800">Inventory & Menu</h1>
         
-        <div className="flex gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
-            <Search className="absolute left-3 top-3 text-slate-400" size={20} />
-            <input 
-              type="text" 
-              placeholder="Search items..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
+        {/* TABS */}
+        <div className="bg-slate-200 p-1 rounded-xl flex gap-1">
           <button 
-            onClick={openAddModal}
-            className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex items-center gap-2 hover:bg-slate-800 transition-colors"
+            onClick={() => setActiveTab('ingredients')}
+            className={`px-6 py-2 rounded-lg font-bold transition-all ${activeTab === 'ingredients' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
           >
-            <Plus size={20} /> Add Item
+            Raw Ingredients
+          </button>
+          <button 
+            onClick={() => setActiveTab('products')}
+            className={`px-6 py-2 rounded-lg font-bold transition-all ${activeTab === 'products' ? 'bg-white shadow text-slate-800' : 'text-slate-500 hover:text-slate-700'}`}
+          >
+            Menu Items
           </button>
         </div>
       </div>
-      
-      {/* Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filteredIngredients.map((item) => {
-          const status = getStockStatus(item.currentStock, item.lowStockThreshold);
-          return (
-            <div 
-              key={item.id} 
-              onClick={() => openEditModal(item)}
-              className={`p-6 rounded-2xl border-l-8 shadow-sm bg-white flex justify-between items-center cursor-pointer hover:shadow-md transition-all group ${status.color.replace('bg-', 'border-')}`}
-            >
-              <div>
-                <h3 className="text-xl font-bold text-slate-800 group-hover:text-emerald-600 transition-colors">{item.name}</h3>
-                <p className="text-slate-500 text-sm uppercase tracking-wide mt-1">
-                  Threshold: {item.lowStockThreshold} {item.unit}
-                </p>
+
+      {/* --- INGREDIENTS VIEW --- */}
+      {activeTab === 'ingredients' && (
+        <>
+          <div className="flex justify-between">
+            <input 
+              type="text" 
+              placeholder="Search ingredients..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="p-3 rounded-xl border border-slate-200 w-64"
+            />
+            <button onClick={() => openIngModal()} className="bg-slate-900 text-white px-4 py-2 rounded-xl font-bold flex gap-2 items-center">
+              <Plus size={20} /> Add Ingredient
+            </button>
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {ingredients.filter(i => i.name.toLowerCase().includes(searchTerm.toLowerCase())).map(item => (
+              <div key={item.id} onClick={() => openIngModal(item)} className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 cursor-pointer hover:border-emerald-500 transition-all">
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="font-bold text-lg">{item.name}</h3>
+                  <Package size={20} className="text-slate-400"/>
+                </div>
+                <div className="text-3xl font-black text-slate-800">{item.currentStock} <span className="text-sm font-medium text-slate-400">{item.unit}</span></div>
               </div>
-              <div className="text-right">
-                <div className="text-4xl font-black text-slate-900">{item.currentStock}</div>
-                <div className={`text-xs font-bold px-2 py-1 rounded-full inline-flex items-center gap-1 mt-1 ${status.color}`}>
-                  {status.icon} {status.label}
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* --- PRODUCTS VIEW --- */}
+      {activeTab === 'products' && (
+        <>
+          <div className="flex justify-end">
+            <button onClick={openProdModal} className="bg-emerald-500 text-white px-6 py-3 rounded-xl font-bold flex gap-2 items-center shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all">
+              <Utensils size={20} /> Create New Menu Item
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {products.map(prod => (
+              <div key={prod.id} className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden group">
+                <div className="h-48 bg-slate-100 relative">
+                  <img src={prod.imgUrl} className="w-full h-full object-cover" />
+                  <button onClick={() => deleteProduct(prod.id)} className="absolute top-2 right-2 bg-white/90 p-2 rounded-full text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover:opacity-100">
+                    <Trash2 size={18} />
+                  </button>
+                </div>
+                <div className="p-6">
+                  <div className="flex justify-between items-start mb-2">
+                    <h3 className="font-bold text-xl text-slate-800">{prod.name}</h3>
+                    <span className="bg-emerald-100 text-emerald-700 px-2 py-1 rounded-lg text-sm font-bold">₱{prod.basePrice}</span>
+                  </div>
+                  <p className="text-sm text-slate-500 mb-4">Recipe:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {prod.recipe && prod.recipe.map((r, idx) => {
+                      // Lookup ingredient name
+                      const ingName = ingredients.find(i => i.id === r.ingredientId)?.name || 'Unknown';
+                      return (
+                        <span key={idx} className="text-xs bg-slate-100 text-slate-600 px-2 py-1 rounded border border-slate-200">
+                          {r.quantityRequired}x {ingName}
+                        </span>
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </div>
+        </>
+      )}
 
-      {/* --- THE SMART MODAL --- */}
-      {isModalOpen && (
+      {/* --- INGREDIENT MODAL (Reuse from Phase 2, simplified here) --- */}
+      {isIngModalOpen && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md">
+            <h2 className="text-xl font-bold mb-4">{editingIngredient ? 'Edit Ingredient' : 'New Ingredient'}</h2>
+            <form onSubmit={saveIngredient} className="space-y-4">
+              <input required placeholder="Name" className="w-full p-3 border rounded-xl" value={ingForm.name} onChange={e => setIngForm({...ingForm, name: e.target.value})} />
+              <div className="grid grid-cols-2 gap-4">
+                <input required type="number" placeholder="Stock" className="w-full p-3 border rounded-xl" value={ingForm.currentStock} onChange={e => setIngForm({...ingForm, currentStock: Number(e.target.value)})} />
+                <input required placeholder="Unit" className="w-full p-3 border rounded-xl" value={ingForm.unit} onChange={e => setIngForm({...ingForm, unit: e.target.value})} />
+              </div>
+              <input required type="number" placeholder="Low Stock Threshold" className="w-full p-3 border rounded-xl" value={ingForm.lowStockThreshold} onChange={e => setIngForm({...ingForm, lowStockThreshold: Number(e.target.value)})} />
+              <button type="submit" className="w-full bg-slate-900 text-white py-3 rounded-xl font-bold">Save</button>
+              <button type="button" onClick={() => setIsIngModalOpen(false)} className="w-full mt-2 text-slate-500 py-2">Cancel</button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* --- PRODUCT BUILDER MODAL (THE NEW FEATURE) --- */}
+      {isProdModalOpen && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-            
-            {/* Modal Header */}
-            <div className="bg-slate-50 p-6 border-b border-slate-100 flex justify-between items-center">
-              <h2 className="text-xl font-bold text-slate-800">
-                {editingItem ? 'Edit / Restock Item' : 'Add New Ingredient'}
+          <div className="bg-white rounded-3xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
+              <h2 className="text-xl font-bold text-slate-800 flex items-center gap-2">
+                <Utensils className="text-emerald-500" /> Construct New Menu Item
               </h2>
-              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600">
-                <X size={24} />
+              <button onClick={() => setIsProdModalOpen(false)}><X size={24} className="text-slate-400" /></button>
+            </div>
+            
+            <div className="p-8 overflow-y-auto flex-1 space-y-8">
+              {/* Basic Info */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">Product Name</label>
+                  <input required type="text" value={prodForm.name} onChange={e => setProdForm({...prodForm, name: e.target.value})} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Bacon Deluxe" />
+                </div>
+                <div>
+                  <label className="block text-sm font-bold text-slate-700 mb-2">Selling Price (₱)</label>
+                  <input required type="number" value={prodForm.basePrice} onChange={e => setProdForm({...prodForm, basePrice: Number(e.target.value)})} className="w-full p-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-emerald-500 outline-none font-mono font-bold" placeholder="0.00" />
+                </div>
+              </div>
+
+              {/* Recipe Builder */}
+              <div>
+                <label className="block text-sm font-bold text-slate-700 mb-4">Recipe Construction (Select Ingredients)</label>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 max-h-64 overflow-y-auto p-2 bg-slate-50 rounded-xl border border-slate-100">
+                  {ingredients.map(ing => {
+                    const isSelected = prodForm.recipe.find(r => r.ingredientId === ing.id);
+                    return (
+                      <div key={ing.id} 
+                        className={`p-3 rounded-xl border transition-all cursor-pointer ${isSelected ? 'bg-emerald-50 border-emerald-500 ring-1 ring-emerald-500' : 'bg-white border-slate-200 hover:border-emerald-300'}`}
+                        onClick={() => toggleIngredientInRecipe(ing.id)}
+                      >
+                        <div className="flex justify-between items-center mb-2">
+                          <span className="font-bold text-sm truncate">{ing.name}</span>
+                          {isSelected && <CheckCircle size={16} className="text-emerald-600" />}
+                        </div>
+                        
+                        {isSelected && (
+                          <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                            <input 
+                              type="number" 
+                              min="0.1"
+                              step="0.1"
+                              value={isSelected.quantityRequired}
+                              onChange={(e) => updateRecipeQty(ing.id, Number(e.target.value))}
+                              className="w-full p-1 text-center text-sm font-bold border border-emerald-200 rounded bg-white"
+                            />
+                            <span className="text-xs text-slate-500">{ing.unit}</span>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-slate-400 mt-2">Click an ingredient to add it. Type the quantity needed per serving.</p>
+              </div>
+            </div>
+
+            <div className="p-6 border-t border-slate-100 bg-slate-50">
+              <button onClick={saveProduct} className="w-full bg-slate-900 text-white py-4 rounded-xl font-bold hover:bg-slate-800 transition-all shadow-lg">
+                Launch Product
               </button>
             </div>
-
-            {/* Modal Form */}
-            <form onSubmit={handleSave} className="p-6 space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Ingredient Name</label>
-                <input 
-                  required
-                  type="text" 
-                  value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
-                  className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                  placeholder="e.g. Cheese Slices"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Current Stock</label>
-                  <input 
-                    required
-                    type="number" 
-                    value={formData.currentStock}
-                    onChange={(e) => setFormData({...formData, currentStock: Number(e.target.value)})}
-                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none font-bold text-slate-900"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-1">Unit</label>
-                  <input 
-                    required
-                    type="text" 
-                    value={formData.unit}
-                    onChange={(e) => setFormData({...formData, unit: e.target.value})}
-                    className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                    placeholder="e.g. pcs, kg"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-700 mb-1">Low Stock Threshold</label>
-                <p className="text-xs text-slate-400 mb-2">Alert me when stock is below this number</p>
-                <input 
-                  required
-                  type="number" 
-                  value={formData.lowStockThreshold}
-                  onChange={(e) => setFormData({...formData, lowStockThreshold: Number(e.target.value)})}
-                  className="w-full p-3 rounded-xl border border-slate-200 focus:ring-2 focus:ring-emerald-500 outline-none"
-                />
-              </div>
-
-              <div className="pt-4 flex gap-3">
-                {editingItem && (
-                  <button 
-                    type="button"
-                    onClick={handleDelete}
-                    className="px-4 py-3 rounded-xl bg-red-50 text-red-600 font-bold hover:bg-red-100 transition-colors"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                )}
-                <button 
-                  type="submit"
-                  className="flex-1 bg-emerald-500 text-white py-3 rounded-xl font-bold shadow-lg shadow-emerald-500/30 hover:bg-emerald-600 transition-all flex justify-center items-center gap-2"
-                >
-                  <Save size={20} /> Save Changes
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}
