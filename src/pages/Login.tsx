@@ -54,7 +54,7 @@ const Login = () => {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-              placeholder="admin@vibepos.com"
+              placeholder="Enter Email"
             />
           </div>
 
@@ -66,7 +66,7 @@ const Login = () => {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 transition-all"
-              placeholder="••••••••"
+              placeholder="Enter Password"
             />
           </div>
 
