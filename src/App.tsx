@@ -1,11 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
-import Inventory from './pages/Inventory';
 import Sell from './pages/Sell';
+import Inventory from './pages/Inventory';
+import Settings from './pages/Settings';
 
 // Placeholder pages (We will build these properly next!)
 const Dashboard = () => <div className="text-3xl font-bold">📊 Dashboard Overview</div>;
-const Settings = () => <div className="text-3xl font-bold">⚙️ System Settings</div>;
 
 function App() {
   return (
