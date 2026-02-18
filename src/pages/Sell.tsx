@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { serverTimestamp, addDoc } from 'firebase/firestore'; 
 import { collection, onSnapshot, runTransaction, doc } from 'firebase/firestore';
 import { db } from '../firebase';
 import { Plus, Minus, Loader2, Receipt } from 'lucide-react';
@@ -92,6 +93,11 @@ const Sell = () => {
     setProcessing(true);
     
     try {
+      // 1. Calculate the final numbers again to be safe
+      const currentSubtotal = cart.reduce((sum, item) => sum + (item.basePrice * item.qty), 0);
+      const currentServiceCharge = (settings?.taxSettings.serviceChargeRate || 0) * currentSubtotal;
+      const currentTotal = currentSubtotal + currentServiceCharge;
+
       await runTransaction(db, async (transaction) => {
         // Step A: Calculate totals needed
         const ingredientsNeeded = new Map<string, number>();
@@ -112,9 +118,7 @@ const Sell = () => {
           const ingRef = doc(db, "ingredients", ingId);
           const ingDoc = await transaction.get(ingRef);
           
-          if (!ingDoc.exists()) {
-            throw "System Error: Ingredient not found in database!";
-          }
+          if (!ingDoc.exists()) throw "System Error: Ingredient not found!";
           
           ingredientDocs.push({ 
             ref: ingRef, 
@@ -124,20 +128,26 @@ const Sell = () => {
           });
         }
 
-        // --- PHASE 2: WRITE ALL ---
+        // --- PHASE 2: WRITE (Deduct Stock) ---
         for (const item of ingredientDocs) {
           if (item.data.currentStock < item.needed) {
-             throw `Out of Stock: ${item.name}. You need ${item.needed} but only have ${item.data.currentStock}.`;
+             throw `Out of Stock: ${item.name}. Needed ${item.needed}, but have ${item.data.currentStock}.`;
           }
-
           transaction.update(item.ref, {
             currentStock: item.data.currentStock - item.needed
           });
         }
       });
 
-      // Success!
-      alert("✅ Sale Successful! Inventory Updated.");
+      // --- PHASE 3: RECORD THE SALE (New!) ---
+      // We do this AFTER the transaction succeeds
+      await addDoc(collection(db, "sales"), {
+        items: cart,
+        total: currentTotal,
+        date: serverTimestamp(), // Records the exact time
+      });
+
+      alert("✅ Sale Recorded!");
       setCart([]); 
 
     } catch (error) {
@@ -147,6 +157,7 @@ const Sell = () => {
       setProcessing(false);
     }
   };
+
 
   if (loading || !settings) return <div className="p-10">Loading POS...</div>;
 
